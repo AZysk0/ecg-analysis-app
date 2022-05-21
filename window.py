@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from PyQt5.QtWidgets import (QApplication,QMainWindow, QWidget,
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget,
                              QMenu, QAction, QMessageBox, QFormLayout,
                              QLabel, QLineEdit, QPushButton, QDialog, QInputDialog,
                              QFileDialog)
@@ -15,14 +15,13 @@ class Chart(FigureCanvas):
         self.fig, self.ax = plt.subplots()
         super().__init__(self.fig)
         self.setParent(parent)
-        print(self.fig, type(self.fig))
 
     ###
-    def redraw_plot(self, signal):
-        self.ax.clear()
-        self.ax.set_xlabel('t')
-        self.ax.set_ylabel('mV')
-        self.ax.plot(signal.time, signal.vector)
+    def redraw_plot(self, t, v, overlap=False):
+        if not overlap:
+            self.ax.clear()
+
+        self.ax.plot(t, v)
         self.draw()
 
     def draw_peaks(self, signal_obj: Signal):
@@ -41,12 +40,12 @@ class MainWindow(QMainWindow):
         self.signal_object = Signal()
         # методи ініціалізації складових вікна
         self._config()
-        self._chart()
+        self._chart()  #
         self._actions()
         self._menubar()
         self._connect_actions()
 
-    ######### конфіг методи
+    ### конфіг методи
     def _actions(self):
         # save submenu
         self.file_save_png = QAction('&PNG', self)  #
@@ -55,9 +54,10 @@ class MainWindow(QMainWindow):
         self.signal_from_file = QAction('&Open...', self)  #
         self.signal_simulate = QAction('&Simulate', self)  #
         self.signal_detect_peaks = QAction('&ECG Peaks', self)  #
+        self.signal_reset_transforms = QAction('&Reset', self)
         # transform submenu
-        self.signal_transform_fft = QAction('&FFT', self)
-        self.signal_transform_dct = QAction('&Discrete Cosine Transform', self)
+        self.signal_transform_fft = QAction('&FFT', self)  #
+        self.signal_transform_dct = QAction('&Discrete Cosine Transform', self)  #
         # help
         self.help_about = QAction('&About', self)  #
 
@@ -74,31 +74,33 @@ class MainWindow(QMainWindow):
         menubar.addMenu(signal_menu)
         menubar.addMenu(help_menu)
         # призначити дії для них
-        file_save_submenu.addAction(self.file_save_png)
-        file_save_submenu.addAction(self.file_save_csv)
+        file_save_submenu.addAction(self.file_save_png)  #
+        file_save_submenu.addAction(self.file_save_csv)  #
 
-        signal_menu.addAction(self.signal_from_file)
-        signal_menu.addAction(self.signal_simulate)
-        signal_menu.addAction(self.signal_detect_peaks)
+        signal_menu.addAction(self.signal_from_file)  #
+        signal_menu.addAction(self.signal_simulate)  #
+        signal_menu.addAction(self.signal_detect_peaks)  #
+        signal_menu.addAction(self.signal_reset_transforms)  #
 
-        transform_submenu.addAction(self.signal_transform_fft)
-        transform_submenu.addAction(self.signal_transform_dct)
+        transform_submenu.addAction(self.signal_transform_fft)  #
+        transform_submenu.addAction(self.signal_transform_dct)  #
 
-        help_menu.addAction(self.help_about)
+        help_menu.addAction(self.help_about)  #
 
     def _connect_actions(self):
         # save submenu
-        self.file_save_png.triggered.connect(self.file_save_image)
-        self.file_save_csv.triggered.connect(self.file_save_vector)
+        self.file_save_png.triggered.connect(self.file_save_image)  #
+        self.file_save_csv.triggered.connect(self.file_save_vector)  #
         # signal
-        self.signal_from_file.triggered.connect(self.signal_load_from_file)
-        self.signal_simulate.triggered.connect(self.signal_simulate_dialog_form)
+        self.signal_from_file.triggered.connect(self.signal_load_from_file)  #
+        self.signal_simulate.triggered.connect(self.signal_simulate_dialog_form)  #
         self.signal_detect_peaks.triggered.connect(self.find_ecg_peaks)  # +++
+        self.signal_reset_transforms.triggered.connect(self.reset_transforms)
         # transform submenu
-        self.signal_transform_fft.triggered.connect(self.signal_object.signal_transform_fft)
-        self.signal_transform_dct.triggered.connect(self.signal_object.signal_transform_dct)
+        self.signal_transform_fft.triggered.connect(self.signal_transform_fft_func)
+        self.signal_transform_dct.triggered.connect(self.signal_transform_dct_func)
         # help
-        self.help_about.triggered.connect(self.help_about_msg)
+        self.help_about.triggered.connect(self.help_about_msg)  #
 
     ###
     def _chart(self):
@@ -161,7 +163,7 @@ class MainWindow(QMainWindow):
         rate = int(self.input_rate.text())
         noise = float(self.input_noise.text())
         self.signal_object.simulate_ecg(duration, rate, noise)
-        self.chart.redraw_plot(self.signal_object)
+        self.chart.redraw_plot(self.signal_object.time, self.signal_object.vector)
         self.sim_dialog.close()
 
     ###
@@ -170,9 +172,10 @@ class MainWindow(QMainWindow):
         filename = QFileDialog\
             .getOpenFileName(self, 'Open File', '',
                              'Text Files(*.txt);;CSV Files(*.csv)')
-        if filename:
+
+        if len(filename[0]) != 0:
             self.signal_object.signal_from_txt(filename[0])
-            self.chart.redraw_plot(self.signal_object)
+            self.chart.redraw_plot(self.signal_object.time, self.signal_object.vector)
 
     # ???
     def find_ecg_peaks(self):
@@ -180,12 +183,23 @@ class MainWindow(QMainWindow):
         self.signal_object.signal_detect_peaks()
         plt.show()
 
-    #========= вейвлет методи
-    def signal_transform_fft(self):
-        raise NotImplementedError
+    def reset_transforms(self):
+        self.chart.redraw_plot(self.signal_object.time,
+                               self.signal_object.main_signal)
 
-    def signal_transform_dwt(self):
-        raise NotImplementedError
+    #========= вейвлет методи
+    def signal_transform_fft_func(self):
+        self.signal_object.signal_transform_fft()
+        self.chart.redraw_plot(self.signal_object.time,
+                               self.signal_object.vector,
+                               overlap=True)
+
+    def signal_transform_dct_func(self):
+        self.signal_object.signal_transform_dct()
+        self.chart.redraw_plot(self.signal_object.time,
+                               self.signal_object.vector,
+                               overlap=True)
+
 
     def signal_some_wavelet_func(self):
         raise NotImplementedError
